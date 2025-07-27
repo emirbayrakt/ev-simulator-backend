@@ -1,45 +1,37 @@
-import seedrandom from "seedrandom";
-import { PrismaClient } from "../../prisma/generated";
-import { chargingDemands, hourlyArrivalProbs } from "./data";
-import { DateTime, Interval } from "luxon";
-
-type RNG = () => number;
-
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = runEngineAndPersist;
+const seedrandom_1 = __importDefault(require("seedrandom"));
+const data_1 = require("./data");
+const luxon_1 = require("luxon");
 // For Simplicity! Canonical non‑leap year in UTC
-const CANONICAL_START_UTC = DateTime.utc(2001, 1, 1, 0, 0, 0, 0);
+const CANONICAL_START_UTC = luxon_1.DateTime.utc(2001, 1, 1, 0, 0, 0, 0);
 const CANONICAL_END_UTC = CANONICAL_START_UTC.plus({ days: 365 });
-
-function sampleChargingDemand(rng: RNG): number {
+function sampleChargingDemand(rng) {
     const r = rng();
     let cumulative = 0;
-    for (const d of chargingDemands) {
+    for (const d of data_1.chargingDemands) {
         cumulative += d.prob;
-        if (r < cumulative) return d.km;
+        if (r < cumulative)
+            return d.km;
     }
     return 0;
 }
-
-function buildCpStatePayload(opts: {
-    perCpPowerKwAtPeak: number[];
-    perCpOccupiedAtPeak: boolean[];
-    perCpEnergyKwhInHour: number[];
-}) {
-    const { perCpPowerKwAtPeak, perCpOccupiedAtPeak, perCpEnergyKwhInHour } =
-        opts;
+function buildCpStatePayload(opts) {
+    const { perCpPowerKwAtPeak, perCpOccupiedAtPeak, perCpEnergyKwhInHour } = opts;
     return {
         power_kw: perCpPowerKwAtPeak,
         occupied: perCpOccupiedAtPeak,
         energy_kwh: perCpEnergyKwhInHour,
     };
 }
-
-export default async function runEngineAndPersist(
-    db: PrismaClient,
-    simulationId: string
-) {
+async function runEngineAndPersist(db, simulationId) {
     const sim = await db.simulation.findUnique({ where: { id: simulationId } });
-    if (!sim) throw new Error("Simulation not found.");
-
+    if (!sim)
+        throw new Error("Simulation not found.");
     // Clean re-run
     await db.$transaction([
         db.simulationResultHourly.deleteMany({ where: { simulationId } }),
@@ -47,50 +39,30 @@ export default async function runEngineAndPersist(
         db.simulationResultMonthly.deleteMany({ where: { simulationId } }),
         db.simulationSummary.deleteMany({ where: { simulationId } }),
     ]);
-
     const cpCount = sim.chargepointCount;
     const chargerPowerKw = sim.chargerPowerKw;
     const energyPerTickKwh = chargerPowerKw * 0.25; // 15-min
     const kwhPerKm = (sim.consumptionKwhPer100km ?? 18) / 100;
     const arrivalMult = sim.arrivalMultiplier ?? 1.0;
     const theoreticalMaxKw = cpCount * chargerPowerKw;
-
     const seed = (sim.seed ?? 0).toString();
-    const rng: RNG =
-        sim.seed === null || sim.seed === undefined
-            ? Math.random
-            : seedrandom(seed);
-
+    const rng = sim.seed === null || sim.seed === undefined
+        ? Math.random
+        : (0, seedrandom_1.default)(seed);
     // Use canonical UTC window
     const startUtc = CANONICAL_START_UTC.startOf("minute");
     const endUtc = CANONICAL_END_UTC.startOf("minute");
-
-    const remainingEnergies = new Array<number>(cpCount).fill(0);
-
-    type HourAgg = {
-        hourStartUtc: Date;
-        energyKwh: number;
-        eventsCount: number;
-        max15mPowerKw: number;
-        max15mMinute: number;
-        occupancyTicks: number;
-        perCpEnergyKwh: number[];
-        perCpPowerKwAtPeak: number[];
-        perCpOccupiedAtPeak: boolean[];
-    };
-    const byHour = new Map<string, HourAgg>();
-
+    const remainingEnergies = new Array(cpCount).fill(0);
+    const byHour = new Map();
     let totalEnergy = 0;
     let actualPeakKw = 0;
-    let actualPeakAt: Date | null = null;
-
+    let actualPeakAt = null;
     for (let t = startUtc; t < endUtc; t = t.plus({ minutes: 15 })) {
         const utcHour = t.hour; // 0..23 (UTC)
         const minute = t.minute;
         const minuteIndex = minute % 60;
         const hourStartUtc = t.startOf("hour").toJSDate();
         const hourKey = hourStartUtc.toISOString();
-
         let agg = byHour.get(hourKey);
         if (!agg) {
             agg = {
@@ -100,25 +72,16 @@ export default async function runEngineAndPersist(
                 max15mPowerKw: 0,
                 max15mMinute: 0,
                 occupancyTicks: 0,
-                perCpEnergyKwh: new Array<number>(cpCount).fill(0),
-                perCpPowerKwAtPeak: new Array<number>(cpCount).fill(0),
-                perCpOccupiedAtPeak: new Array<boolean>(cpCount).fill(false),
+                perCpEnergyKwh: new Array(cpCount).fill(0),
+                perCpPowerKwAtPeak: new Array(cpCount).fill(0),
+                perCpOccupiedAtPeak: new Array(cpCount).fill(false),
             };
             byHour.set(hourKey, agg);
         }
-
-        const arrivalProbPerCp = Math.min(
-            1,
-            Math.max(
-                0,
-                ((hourlyArrivalProbs[utcHour] ?? 0) * (arrivalMult ?? 1)) / 4
-            )
-        );
-
+        const arrivalProbPerCp = Math.min(1, Math.max(0, ((data_1.hourlyArrivalProbs[utcHour] ?? 0) * (arrivalMult ?? 1)) / 4));
         let intervalEnergy = 0;
-        const perCpDeliveredKwh = new Array<number>(cpCount).fill(0);
+        const perCpDeliveredKwh = new Array(cpCount).fill(0);
         let occupiedNow = 0;
-
         for (let i = 0; i < cpCount; i++) {
             if (remainingEnergies[i] <= 0) {
                 if (rng() < arrivalProbPerCp) {
@@ -129,33 +92,25 @@ export default async function runEngineAndPersist(
                     }
                 }
             }
-
             if (remainingEnergies[i] > 0) {
-                const delivered = Math.min(
-                    remainingEnergies[i],
-                    energyPerTickKwh
-                );
+                const delivered = Math.min(remainingEnergies[i], energyPerTickKwh);
                 remainingEnergies[i] -= delivered;
                 intervalEnergy += delivered;
                 perCpDeliveredKwh[i] = delivered;
                 occupiedNow += 1;
             }
         }
-
         totalEnergy += intervalEnergy;
-
         const powerThisIntervalKw = intervalEnergy * 4;
         if (powerThisIntervalKw > actualPeakKw) {
             actualPeakKw = powerThisIntervalKw;
             actualPeakAt = t.toJSDate();
         }
-
         agg.energyKwh += intervalEnergy;
         agg.occupancyTicks += occupiedNow;
         for (let i = 0; i < cpCount; i++) {
             agg.perCpEnergyKwh[i] += perCpDeliveredKwh[i];
         }
-
         if (powerThisIntervalKw > agg.max15mPowerKw) {
             agg.max15mPowerKw = powerThisIntervalKw;
             agg.max15mMinute = minuteIndex;
@@ -165,11 +120,7 @@ export default async function runEngineAndPersist(
             }
         }
     }
-
-    const hourlyRows = [...byHour.values()].sort(
-        (a, b) => a.hourStartUtc.getTime() - b.hourStartUtc.getTime()
-    );
-
+    const hourlyRows = [...byHour.values()].sort((a, b) => a.hourStartUtc.getTime() - b.hourStartUtc.getTime());
     // Persist hourly
     const chunkSize = 2000;
     for (let i = 0; i < hourlyRows.length; i += chunkSize) {
@@ -192,77 +143,60 @@ export default async function runEngineAndPersist(
             })),
         });
     }
-
     // Daily aggregates (UTC)
-    const byDay = new Map<
-        string,
-        { energy: number; events: number; max15: number }
-    >();
+    const byDay = new Map();
     for (const h of hourlyRows) {
-        const key = DateTime.fromJSDate(h.hourStartUtc, {
+        const key = luxon_1.DateTime.fromJSDate(h.hourStartUtc, {
             zone: "utc",
-        }).toISODate()!;
+        }).toISODate();
         const curr = byDay.get(key) ?? { energy: 0, events: 0, max15: 0 };
         curr.energy += h.energyKwh;
         curr.events += h.eventsCount;
         curr.max15 = Math.max(curr.max15, h.max15mPowerKw);
         byDay.set(key, curr);
     }
-
     const dailyRows = [...byDay.entries()]
         .map(([isoDate, v]) => ({
-            simulationId,
-            date: DateTime.fromISO(isoDate, { zone: "utc" }).toJSDate(), // DATE (UTC)
-            energyKwh: v.energy,
-            eventsCount: v.events,
-            max15mPowerKw: v.max15,
-        }))
-        .sort((a, b) => (a.date as any) - (b.date as any));
-
+        simulationId,
+        date: luxon_1.DateTime.fromISO(isoDate, { zone: "utc" }).toJSDate(), // DATE (UTC)
+        energyKwh: v.energy,
+        eventsCount: v.events,
+        max15mPowerKw: v.max15,
+    }))
+        .sort((a, b) => a.date - b.date);
     for (let i = 0; i < dailyRows.length; i += chunkSize) {
         await db.simulationResultDaily.createMany({
             data: dailyRows.slice(i, i + chunkSize),
         });
     }
-
     // Monthly aggregates (UTC, first day of month)
-    const byMonth = new Map<
-        string,
-        { energy: number; events: number; max15: number }
-    >();
+    const byMonth = new Map();
     for (const h of hourlyRows) {
-        const key = DateTime.fromJSDate(h.hourStartUtc, { zone: "utc" })
+        const key = luxon_1.DateTime.fromJSDate(h.hourStartUtc, { zone: "utc" })
             .startOf("month")
-            .toISODate()!;
+            .toISODate();
         const curr = byMonth.get(key) ?? { energy: 0, events: 0, max15: 0 };
         curr.energy += h.energyKwh;
         curr.events += h.eventsCount;
         curr.max15 = Math.max(curr.max15, h.max15mPowerKw);
         byMonth.set(key, curr);
     }
-
     const monthlyRows = [...byMonth.entries()]
         .map(([isoMonthStart, v]) => ({
-            simulationId,
-            monthStart: DateTime.fromISO(isoMonthStart, {
-                zone: "utc",
-            }).toJSDate(), // DATE (UTC)
-            energyKwh: v.energy,
-            eventsCount: v.events,
-            max15mPowerKw: v.max15,
-        }))
-        .sort((a, b) => (a.monthStart as any) - (b.monthStart as any));
-
+        simulationId,
+        monthStart: luxon_1.DateTime.fromISO(isoMonthStart, {
+            zone: "utc",
+        }).toJSDate(), // DATE (UTC)
+        energyKwh: v.energy,
+        eventsCount: v.events,
+        max15mPowerKw: v.max15,
+    }))
+        .sort((a, b) => a.monthStart - b.monthStart);
     if (monthlyRows.length > 0) {
         await db.simulationResultMonthly.createMany({ data: monthlyRows });
     }
-
-    const durationHours = Math.round(
-        Interval.fromDateTimes(startUtc, endUtc).length("hours") ?? 0
-    );
-    const concurrencyFactor =
-        theoreticalMaxKw > 0 ? actualPeakKw / theoreticalMaxKw : 0;
-
+    const durationHours = Math.round(luxon_1.Interval.fromDateTimes(startUtc, endUtc).length("hours") ?? 0);
+    const concurrencyFactor = theoreticalMaxKw > 0 ? actualPeakKw / theoreticalMaxKw : 0;
     await db.simulationSummary.create({
         data: {
             simulationId,

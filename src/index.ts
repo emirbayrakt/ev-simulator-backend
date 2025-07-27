@@ -6,7 +6,7 @@ import cors from "cors";
 import fs from "fs";
 import { resolvers } from "./graphql/resolvers";
 import { Context } from "./context";
-import { PrismaClient } from "./generated/prisma";
+import { PrismaClient } from "../prisma/generated";
 
 const prisma = new PrismaClient();
 
