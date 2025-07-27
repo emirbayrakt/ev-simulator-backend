@@ -1,25 +1,32 @@
 FROM node:22-alpine
 
+# Set working directory and timezone
 WORKDIR /app
-
 ENV NODE_ENV=production
 ENV TZ=Europe/Berlin
 
-# Copy dependencies and install only prod packages
-COPY package*.json ./
-RUN npm ci --omit=dev
+# Install system dependencies for Prisma and timezone
+RUN apk add --no-cache tzdata \
+  && cp /usr/share/zoneinfo/$TZ /etc/localtime \
+  && echo "$TZ" > /etc/timezone
 
-# Copy full source including prisma files
+# Copy package files and install all dependencies including dev
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
 COPY . .
 
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build the TypeScript app
+# Compile TypeScript to JavaScript
 RUN npm run build
 
-# Run migrations & start the app
-CMD npx prisma migrate deploy && node build/index.js
+# Remove devDependencies to keep image small
+RUN npm prune --omit=dev
 
-# Optional: expose port if running locally
+# Run DB migration and start the app
+CMD ["sh", "-c", "npx prisma migrate deploy && node build/index.js"]
+
 EXPOSE 4000
