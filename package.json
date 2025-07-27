@@ -1,0 +1,43 @@
+{
+    "name": "ev-simulator-backend",
+    "version": "1.0.0",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+        "start": "node build/index.js",
+        "build": "tsc"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": "",
+    "devDependencies": {
+        "@types/body-parser": "^1.19.6",
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.3",
+        "@types/luxon": "^3.6.2",
+        "@types/node": "^24.1.0",
+        "@types/seedrandom": "^3.0.8",
+        "ts-node-dev": "^2.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "^5.8.3"
+    },
+    "dependencies": {
+        "@apollo/server": "^5.0.0",
+        "@as-integrations/express5": "^1.1.2",
+        "@graphql-tools/merge": "^9.1.1",
+        "@prisma/client": "^6.12.0",
+        "cors": "^2.8.5",
+        "date-fns": "^4.1.0",
+        "dotenv": "^17.2.1",
+        "express": "^5.1.0",
+        "graphql": "^16.11.0",
+        "graphql-scalars": "^1.24.2",
+        "graphql-tag": "^2.12.6",
+        "graphql-type-json": "^0.3.2",
+        "luxon": "^3.7.1",
+        "prisma": "^6.12.0",
+        "seedrandom": "^3.0.5"
+    }
+}

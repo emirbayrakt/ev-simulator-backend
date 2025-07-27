@@ -1,0 +1,143 @@
+scalar Date
+scalar DateTime
+scalar JSON
+
+enum SimulationStatus {
+    queued
+    running
+    completed
+    failed
+    cancelled
+}
+
+type Simulation {
+    id: ID!
+    name: String
+    status: SimulationStatus!
+
+    # kept for display; now auto-set to a canonical year in UTC
+    startAt: DateTime!
+    endAt: DateTime!
+
+    seed: Int
+    arrivalMultiplier: Float!
+    chargepointCount: Int!
+    consumptionKwhPer100km: Float!
+    chargerPowerKw: Float!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+
+    # Yearly summary for the run
+    summary: SimulationSummary
+
+    # All hourly rows (without CP details)
+    hourlyResults: [SimulationResultHourly!]!
+
+    # subsets for better performance:
+    dailyResults: [SimulationAggregate!]! # 1 row per day
+    monthlyResults: [SimulationAggregate!]! # 1 row per month
+}
+
+type SimulationSummary {
+    totalEnergyKwh: Float!
+    theoreticalMaxKw: Float!
+    actualPeakKw: Float!
+    actualPeakAt: DateTime!
+    concurrencyFactor: Float!
+    eventsTotal: Int!
+    durationHours: Int!
+}
+
+# Hourly row for graphs/heatmaps (no cpState here)
+type SimulationResultHourly {
+    id: ID!
+    hourStart: DateTime!
+    energyKwh: Float!
+    avgPowerKw: Float!
+    max15mPowerKw: Float!
+    max15mMinute: Int!
+    eventsCount: Int!
+}
+
+# Aggregate rows for days or months
+type SimulationAggregate {
+    periodStart: DateTime! # start of day/month
+    periodEnd: DateTime! # exclusive end
+    energyKwh: Float!
+    eventsCount: Int!
+    max15mPowerKw: Float!
+}
+
+# Detailed hourly view (when user clicks an hour)
+type SimulationResultHourlyDetail {
+    id: ID!
+    hourStart: DateTime!
+    energyKwh: Float!
+    avgPowerKw: Float!
+    max15mPowerKw: Float!
+    max15mMinute: Int!
+    eventsCount: Int!
+    busyCpCountAvg: Float
+    cpState: JSON! # per‑chargepoint snapshot/array/object
+}
+
+type Query {
+    simulations: [Simulation!]!
+
+    simulation(id: ID!): Simulation
+
+    # Heatmap sources:
+    simulationMonthlyAggregates(simulationId: ID!): [SimulationAggregate!]!
+    simulationDailyAggregates(simulationId: ID!): [SimulationAggregate!]!
+
+    # 24 hourly rows for a selected date (no cp details)
+    simulationHourlyForDate(
+        simulationId: ID!
+        date: Date!
+    ): [SimulationResultHourly!]!
+
+    # Single hour with per‑chargepoint details
+    simulationHourlyDetail(
+        simulationId: ID!
+        hourStart: DateTime!
+    ): SimulationResultHourlyDetail
+}
+
+type ChargepointDailyData {
+    date: Date!
+    energyKwh: Float!
+    powerKw: Float!
+    occupied: Boolean!
+}
+
+extend type Query {
+    simulationChargepointDailySeries(
+        simulationId: ID!
+        cpIndex: Int!
+    ): [ChargepointDailyData!]!
+}
+
+input CreateSimulationInput {
+    name: String
+    seed: Int
+    arrivalMultiplier: Float
+    chargepointCount: Int!
+    consumptionKwhPer100km: Float
+    chargerPowerKw: Float
+}
+
+input UpdateSimulationInput {
+    name: String
+    arrivalMultiplier: Float
+    chargepointCount: Int
+    consumptionKwhPer100km: Float
+    chargerPowerKw: Float
+    seed: Int
+}
+
+type Mutation {
+    createSimulation(input: CreateSimulationInput!): Simulation!
+    updateSimulation(id: ID!, input: UpdateSimulationInput!): Simulation!
+    deleteSimulation(id: ID!): Boolean!
+    runSimulation(id: ID!, mock: Boolean): Simulation!
+}

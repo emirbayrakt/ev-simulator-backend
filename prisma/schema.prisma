@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SimulationStatus {
+  queued
+  running
+  completed
+  failed
+  cancelled
+}
+
+model Simulation {
+  id                     String           @id @default(uuid()) @db.Uuid
+  name                   String?
+  status                 SimulationStatus @default(queued)
+  startAt                DateTime         @db.Timestamptz(6)
+  endAt                  DateTime         @db.Timestamptz(6)
+  seed                   Int?
+  arrivalMultiplier      Float            @default(1.0)
+  chargepointCount       Int
+  consumptionKwhPer100km Float            @default(18.0)
+  chargerPowerKw         Float            @default(11.0)
+  createdAt              DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime         @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  summary        SimulationSummary?
+  hourlyResults  SimulationResultHourly[]
+  dailyResults   SimulationResultDaily[]
+  monthlyResults SimulationResultMonthly[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SimulationSummary {
+  simulationId      String   @id @db.Uuid
+  totalEnergyKwh    Float
+  theoreticalMaxKw  Float
+  actualPeakKw      Float
+  actualPeakAt      DateTime @db.Timestamptz(6)
+  concurrencyFactor Float
+  eventsTotal       Int
+  durationHours     Int
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+}
+
+model SimulationResultHourly {
+  id             BigInt   @id @default(autoincrement()) @db.BigInt
+  simulationId   String   @db.Uuid
+  hourStart      DateTime @db.Timestamptz(6)
+  energyKwh      Float
+  avgPowerKw     Float
+  max15mPowerKw  Float
+  max15mMinute   Int
+  eventsCount    Int
+  busyCpCountAvg Float?
+  cpState        Json? // JSONB: per‑CP snapshot 
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  @@index([simulationId, hourStart])
+  @@index([hourStart])
+}
+
+model SimulationResultDaily {
+  id            BigInt   @id @default(autoincrement()) @db.BigInt
+  simulationId  String   @db.Uuid
+  date          DateTime @db.Date
+  energyKwh     Float
+  eventsCount   Int
+  max15mPowerKw Float
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  @@index([simulationId, date])
+}
+
+model SimulationResultMonthly {
+  id            BigInt   @id @default(autoincrement()) @db.BigInt
+  simulationId  String   @db.Uuid
+  monthStart    DateTime @db.Date // first day of month
+  energyKwh     Float
+  eventsCount   Int
+  max15mPowerKw Float
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  @@index([simulationId, monthStart])
+}
