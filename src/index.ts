@@ -27,7 +27,10 @@ async function start() {
 
     app.use(
         "/graphql",
-        cors(),
+        cors({
+            origin: ["https://evsim.ebayraktar.com", "http://localhost:4000"],
+            credentials: true,
+        }),
         express.json(),
         expressMiddleware(server, {
             context: async () => ({ prisma }),
