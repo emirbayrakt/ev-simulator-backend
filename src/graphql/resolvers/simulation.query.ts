@@ -105,7 +105,7 @@ export const SimulationQueryResolvers = {
         // 24 hourly rows for a selected date (no chargepoint details)
         simulationHourlyForDate: async (
             _parent: unknown,
-            args: { simulationId: string; date: Date }, // 👈 FIXED
+            args: { simulationId: string; date: Date },
             ctx: Context
         ) => {
             try {
