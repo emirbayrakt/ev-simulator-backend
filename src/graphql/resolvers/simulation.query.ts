@@ -4,6 +4,12 @@ import { Context } from "../../context";
 
 const prisma = new PrismaClient();
 
+const isValidUUID = (id: string): boolean => {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        id
+    );
+};
+
 export const SimulationQueryResolvers = {
     // -------- Root Query resolvers --------
     Query: {
@@ -27,6 +33,9 @@ export const SimulationQueryResolvers = {
             ctx: Context
         ) => {
             try {
+                if (!isValidUUID(args.id)) {
+                    throw new Error("Invalid simulation ID format");
+                }
                 const db = ctx?.prisma ?? prisma;
                 return db.simulation.findUnique({
                     where: { id: args.id },
